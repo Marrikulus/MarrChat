@@ -1,4 +1,16 @@
 
+ifeq ($(OS),Windows_NT)
+	$(error This is not ready for windows)
+else
+	UNAME_S := $(shell uname -s)
+	ifeq ($(UNAME_S), Linux)
+		PRE := sudo apt install libglew-dev libsdl2-dev libsdl2-ttf-dev -y
+	else
+		PRE := brew install sdl2 sdl2_ttf glew
+	endif
+endif
+
+
 linkerDebugFlags= -Wl,-V
 
 linkerFlags = -lRakNetLibStatic -lpthread -lSDL2 -lGLEW -lGL -lSDL2_ttf
@@ -12,3 +24,6 @@ client:
 
 server:
 	g++ Source/Server.cpp -IInclude -LLibraries $(linkerFlags) -o bin/server
+
+pre:
+	$(PRE)
