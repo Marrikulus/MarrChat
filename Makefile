@@ -4,9 +4,9 @@ ifeq ($(OS),Windows_NT)
 else
 	UNAME_S := $(shell uname -s)
 	ifeq ($(UNAME_S), Linux)
-		PRE := sudo apt install libglew-dev libsdl2-dev libsdl2-ttf-dev -y
+		PRE := sudo apt install libglew-dev libsdl2-dev libglm-dev libsdl2-ttf-dev -y
 	else
-		PRE := brew install sdl2 sdl2_ttf glew
+		PRE := brew install sdl2 sdl2_ttf glew glm
 	endif
 endif
 

@@ -7,6 +7,10 @@
 #define GL3_PROTOTYPES 1
 #include <GL/gl.h>
 
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 #include "Common.h"
@@ -119,7 +123,7 @@ void processNetwork(RakNet::RakPeerInterface *peer)
 //u32 wrap = 200;
 //TTF_RenderText_Blended_Wrapped(font, text, color, wrap);
 
-void drawText(char *text, int x, int y)
+void drawText(char *text, float x, float y)
 {
 	glEnable(GL_TEXTURE_2D);
 	TTF_Font * font = TTF_OpenFont("FreeSans.ttf", 30);
@@ -130,14 +134,26 @@ void drawText(char *text, int x, int y)
 	}
 
 	GLuint Handle = 0;
-	GLuint format;
-	GLuint colors;
 
 	SDL_Color color = { 0, 0, 0 };
 	auto message = TTF_RenderText_Blended(font, text, color);
 
 	if (message)
 	{
+		glBindVertexArray(Opengl.VertexArrayHandle);
+		float w = message->w;
+		float h = message->h;
+
+		float vertices[6][4] = {
+			{ x, 	y+h, 	0.0f, 0.0f },
+			{ x,  	y, 		0.0f, 1.0f },
+			{ x+w,	y, 		1.0f, 1.0f },
+
+			{ x, 	y+h, 	0.0f, 0.0f },
+			{ x+w,	y, 		1.0f, 1.0f },
+			{ x+w, 	y+h, 	1.0f, 0.0f },
+		};
+
 		glGenTextures(1, &Handle);
 		glBindTexture(GL_TEXTURE_2D, Handle);
 
@@ -149,11 +165,14 @@ void drawText(char *text, int x, int y)
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-		glBindVertexArray(Opengl.VertexArrayHandle);
-		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+		glBindBuffer(GL_ARRAY_BUFFER, Opengl.VertexBufferHandle);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
+
+		glDrawArrays(GL_TRIANGLES, 0,  6);
 
 		glBindTexture(GL_TEXTURE_2D, 0);
 		glDeleteTextures(1, &Handle);
+		glBindVertexArray(0);
 	}
 
 	SDL_FreeSurface(message);
@@ -210,18 +229,15 @@ int main(int argc, char const *argv[])
 		#define v3 vec3
 		#define v2 vec2
 
-		layout (location = 0) in v3 aPos;
-		layout (location = 1) in v3 aColor;
-		layout (location = 2) in v2 aTexCoord;
+		layout (location = 0) in v4 vertex;
 
+		uniform mat4 projection;
 		out v2 textureCoord;
-		out v3 ourColor;
 
 		void main()
 		{
-			gl_Position = v4(aPos, 1.0);
-			ourColor = aColor;
-			textureCoord = aTexCoord;
+			gl_Position = projection * v4(vertex.xy, 0.0, 1.0);
+			textureCoord = vertex.zw;
 		}
 		)FOO"
 	};
@@ -242,7 +258,6 @@ int main(int argc, char const *argv[])
 		#define v2 vec2
 
 		out v4 FragColor;
-		in v3 ourColor;
 		in v2 textureCoord;
 
 		uniform sampler2D ourTexture;
@@ -274,48 +289,23 @@ int main(int argc, char const *argv[])
 	peer->Startup(1, &sd, 1);
 	peer->Connect("127.0.0.1", SERVER_PORT, 0, 0);
 
-
-	float tileImageOffset = 0.20f;
-	float tilenumber = 3.0f;
-
-	float vertices[] = {
-		// positions          // colors           // texture coords
-		 0.5f,  0.8f, 0.0f,   1.0f, 1.0f, 1.0f,   1.0f, 0.0f,   // top right
-		 0.5f, -0.8f, 0.0f,   1.0f, 1.0f, 1.0f,   1.0f, 1.0f,   // bottom right
-		-0.5f, -0.8f, 0.0f,   1.0f, 1.0f, 1.0f,   0.0f, 1.0f,   // bottom left
-		-0.5f,  0.8f, 0.0f,   1.0f, 1.0f, 1.0f,   0.0f, 0.0f    // top left
-	};
-
-	unsigned int indices[] = {
-		0, 1, 3, // first triangle
-		1, 2, 3  // second triangle
-	};
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 	glGenVertexArrays(1, &Opengl.VertexArrayHandle);
 	glGenBuffers(1, &Opengl.VertexBufferHandle);
-	glGenBuffers(1, &Opengl.ElementBufferObject);
 
 	glBindVertexArray(Opengl.VertexArrayHandle);
-
 	glBindBuffer(GL_ARRAY_BUFFER, Opengl.VertexBufferHandle);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Opengl.ElementBufferObject);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-
-	glVertexAttribPointer( 0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0 );
+	glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 6 * 4, NULL, GL_DYNAMIC_DRAW);
 	glEnableVertexAttribArray(0);
-	glVertexAttribPointer( 1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
-	glEnableVertexAttribArray(1);
-	glVertexAttribPointer( 2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
-	glEnableVertexAttribArray(2);
-
+	glVertexAttribPointer( 0, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 4 , (void*)0 );
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glBindVertexArray(0);
 
+	glm::mat4 projection = glm::ortho(0.0f, 800.0f, 0.0f, 600.0f);
 	glUseProgram(Opengl.ProgramId);
+	glUniformMatrix4fv(glGetUniformLocation(Opengl.ProgramId, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
 
 	while (!quit)
 	{
@@ -381,7 +371,7 @@ int main(int argc, char const *argv[])
 		//position.y = SCREEN_HEIGHT / 2;
 
 		//drawText("Testdfdf", 50, 50);
-		drawText(text, 50, 300);
+		drawText(text, 50.0f, 300.0f);
 
 
 		SDL_GL_SwapWindow(window);
