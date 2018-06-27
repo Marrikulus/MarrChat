@@ -1,4 +1,3 @@
-#include <iostream>
 #include "Common.h"
 
 int main(int argc, char const *argv[])
@@ -10,6 +9,7 @@ int main(int argc, char const *argv[])
 	peer->Startup(MAX_CLIENTS, &sd, 1);
 	peer->SetMaximumIncomingConnections(MAX_CLIENTS);
 
+	std::vector<Message> messages = {};
 
 	while (1)
 	{
@@ -57,11 +57,18 @@ int main(int argc, char const *argv[])
 				}break;
 				case ID_MARR_MESSAGE:
 				{
-					RakNet::RakString rs;
-					RakNet::BitStream bsIn(packet->data,packet->length,false);
-					bsIn.IgnoreBytes(sizeof(RakNet::MessageID));
-					bsIn.Read(rs);
-					std::cout << "text: '" << rs.C_String() << "'" << std::endl;
+					//Message msg = {};
+
+					Message* msg = (Message*)packet->data;
+					messages.push_back(*msg);
+
+					peer->Send((char*)msg,sizeof(Message),HIGH_PRIORITY,RELIABLE_ORDERED,0, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true);
+					//RakNet::RakString rs;
+					//RakNet::BitStream bsIn(packet->data,packet->length,false);
+					//bsIn.IgnoreBytes(sizeof(RakNet::MessageID));
+					//bsIn.Read(rs);
+					std::cout << "From: '" << msg->name << "'" << std::endl;
+					std::cout << "text: '" << msg->text << "'" << std::endl;
 				}break;
 				default:
 				{

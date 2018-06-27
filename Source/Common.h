@@ -1,7 +1,13 @@
+#include <iostream>
+#include <vector>
+
 #include "RakNet/RakPeerInterface.h"
 #include "RakNet/MessageIdentifiers.h"
 #include "RakNet/BitStream.h"
 #include "RakNet/RakNetTypes.h"
+
+typedef char i8;
+typedef short i16;
 
 typedef uint8_t u8;
 typedef uint16_t u16;
@@ -22,3 +28,13 @@ enum {
 	ID_MARR_MESSAGE = ID_USER_PACKET_ENUM+1,
 	ID_MARR_WRITING,
 };
+
+
+#pragma pack(push, 1)
+struct Message
+{
+	u8 type;
+	i8 text[255];
+	i8 name[24];
+};
+#pragma pop()

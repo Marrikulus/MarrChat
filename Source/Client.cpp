@@ -1,7 +1,6 @@
 #include <csignal>
-#include <iostream>
 #include <sstream>
-#include <vector>
+
 
 
 #include <GL/glew.h>
@@ -19,8 +18,6 @@
 #define MIN(a, b) ((a < b) ? a : b)
 #define MAX(a, b) ((a > b) ? a : b)
 
-#define MAX_TEXT_LENGTH 256
-
 static const int 	SCREEN_WIDTH  = 800;
 static const int 	SCREEN_HEIGHT = 600;
 static const float 	SCREEN_WIDTH_F  = 800.0f;
@@ -31,7 +28,10 @@ static SDL_Event event;
 static RakNet::Packet *packet = NULL;
 static bool quit = false;
 
+#define MAX_TEXT_LENGTH 256
 static char text[MAX_TEXT_LENGTH];
+#define MAX_NAME_LENGTH 24
+static char userName[MAX_NAME_LENGTH];
 
 
 static struct OpenGL
@@ -45,16 +45,12 @@ static struct OpenGL
 } Opengl;
 
 
-struct Message
-{
-	char text[255];
-	char name[24];
-};
 
 
-void processNetwork(RakNet::RakPeerInterface *peer);
-float drawText(char *text, float x, float y);
+void processNetwork(std::vector<Message> *messages,RakNet::RakPeerInterface *peer);
 void processEvents(std::vector<Message> *messages, RakNet::RakPeerInterface *peer);
+float drawText(char *text, float x, float y);
+void drawSquare(float x, float y, float w, float h);
 void TextShader(OpenGL*);
 
 //u32 wrap = 200;
@@ -71,6 +67,16 @@ int main(int argc, char const *argv[])
 	{
 		SDL_Quit();
 		return 1;
+	}
+
+	if (argc > 1)
+	{
+		int length = MIN(strlen(argv[1]), MAX_NAME_LENGTH);
+		strncpy(userName, argv[1], length);
+	}
+	else
+	{
+		strncpy(userName, "Ingimar", 8);
 	}
 
 	u32 startclock = 0;
@@ -145,7 +151,7 @@ int main(int argc, char const *argv[])
 	while (!quit)
 	{
 		startclock = SDL_GetTicks();
-		processNetwork(peer);
+		processNetwork(&messages, peer);
 		processEvents(&messages, peer);
 
 		glClear( GL_COLOR_BUFFER_BIT );
@@ -153,6 +159,8 @@ int main(int argc, char const *argv[])
 		float nameX = 10.0f;
 		float textX = 100.0f;
 		float y = SCREEN_HEIGHT_F - 30.0f;
+
+		drawSquare(30.0f, 30.0f, 30.0f, 30.0f);
 
 		for (auto message : messages)
 		{
@@ -191,6 +199,7 @@ int main(int argc, char const *argv[])
 	glDeleteBuffers(1, &Opengl.VertexBufferHandle);
 	glDeleteVertexArrays(1, &Opengl.VertexArrayHandle);
 
+	peer->Shutdown(300);
 	RakNet::RakPeerInterface::DestroyInstance(peer);
 
 	SDL_GL_DeleteContext(context);
@@ -228,19 +237,18 @@ void processEvents(std::vector<Message> *messages, RakNet::RakPeerInterface *pee
 							//}
 							//newMessage[textlen] = 0;
 
-							Message msg = {};
-							strncpy(msg.name, "Ingimar", 8);
-							strncpy(msg.text, text, MIN(sizeof(msg.text), textlen));
-							messages->push_back(msg);
 
-							if (peer->GetSystemAddressFromIndex(0) != RakNet::UNASSIGNED_SYSTEM_ADDRESS)
-							{
-								std::cout << peer->GetSystemAddressFromIndex(0).ToString() << std::endl;
-								RakNet::BitStream bsOut;
-								bsOut.Write((RakNet::MessageID)ID_MARR_MESSAGE);
-								bsOut.Write(text);
-								peer->Send(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0, peer->GetSystemAddressFromIndex(0),false);
-							}
+							Message msg = {};
+							msg.type = (u8)ID_MARR_MESSAGE;
+
+							strncpy(msg.name, userName, strlen(userName));
+							strncpy(msg.text, text, MIN(sizeof(msg.text), textlen));
+							//messages->push_back(msg);
+
+							//RakNet::BitStream bsOut;
+							//bsOut.Write(text);
+							//peer->Send(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0, peer->GetSystemAddressFromIndex(0),false);
+							peer->Send((char*)&msg,sizeof(Message),HIGH_PRIORITY,RELIABLE_ORDERED,0, RakNet::UNASSIGNED_SYSTEM_ADDRESS,true);
 
 							text[0] = 0x00;
 						}
@@ -287,8 +295,16 @@ void TextShader(OpenGL * op)
 
 		void main()
 		{
-			gl_Position = projection * v4(vertex.xy, 0.0, 1.0);
-			textureCoord = vertex.zw;
+			if (isText)
+			{
+				gl_Position = projection * v4(vertex.xy, 0.0, 1.0);
+				textureCoord = vertex.zw;
+			}
+			else
+			{
+				gl_Position = projection * v4(vertex.xy, 0.0, 1.0);
+			}
+
 		}
 		)FOO"
 	};
@@ -310,11 +326,20 @@ void TextShader(OpenGL * op)
 		out v4 FragColor;
 		in v2 textureCoord;
 
+		uniform bool isText;
+		uniform v3 color;
 		uniform sampler2D ourTexture;
 
 		void main()
 		{
-			FragColor = texture(ourTexture, textureCoord);
+			if (isText)
+			{
+				FragColor = texture(ourTexture, textureCoord);
+			}
+			else
+			{
+				FragColor = v4(color, 1.0);
+			}
 		}
 		)FOO",
 	};
@@ -328,8 +353,10 @@ void TextShader(OpenGL * op)
 	glLinkProgram(op->ProgramId);
 }
 
-float drawSquare(float x, float y, float w, float h)
+void drawSquare(float x, float y, float w, float h)
 {
+	glUniform3f(glGetUniformLocation(Opengl.ProgramId, "color"), 1.0f, 0.0f, 0.0f);
+	glUniform1i(glGetUniformLocation(Opengl.ProgramId, "isText"), 0);
 	glBindVertexArray(Opengl.VertexArrayHandle);
 
 	float vertices[6][4] = {
@@ -342,32 +369,16 @@ float drawSquare(float x, float y, float w, float h)
 		{ x+w, 	y, 		1.0f, 0.0f },
 	};
 
-	glGenTextures(1, &Handle);
-	glBindTexture(GL_TEXTURE_2D, Handle);
-
-
-	glUniformMatrix4fv(glGetUniformLocation(Opengl.ProgramId, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
-
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, message->w, message->h, 0,
-					GL_BGRA, GL_UNSIGNED_BYTE, message->pixels);
-
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
 	glBindBuffer(GL_ARRAY_BUFFER, Opengl.VertexBufferHandle);
     glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
 
 	glDrawArrays(GL_TRIANGLES, 0,  6);
-
-	glBindTexture(GL_TEXTURE_2D, 0);
-	glDeleteTextures(1, &Handle);
 	glBindVertexArray(0);
 }
 
 float drawText(char *text, float x, float y)
 {
+	glUniform1i(glGetUniformLocation(Opengl.ProgramId, "isText"), 1);
 	glEnable(GL_TEXTURE_2D);
 	TTF_Font * font = TTF_OpenFont("FreeSans.ttf", 20);
 	if (font == NULL)
@@ -427,7 +438,7 @@ float drawText(char *text, float x, float y)
 	return h;
 }
 
-void processNetwork(RakNet::RakPeerInterface *peer)
+void processNetwork(std::vector<Message> *messages, RakNet::RakPeerInterface *peer)
 {
 	for (packet=peer->Receive(); packet; peer->DeallocatePacket(packet), packet=peer->Receive())
 	{
@@ -450,11 +461,10 @@ void processNetwork(RakNet::RakPeerInterface *peer)
 				std::cout << "Our connection request has been accepted." << std::endl;
 
 
-				RakNet::BitStream bsOut;
-				bsOut.Write((RakNet::MessageID)ID_MARR_MESSAGE);
-				bsOut.Write("Hello, I'm Client");
-
-				peer->Send(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0,packet->systemAddress,false);
+				//RakNet::BitStream bsOut;
+				//bsOut.Write((RakNet::MessageID)ID_MARR_MESSAGE);
+				//bsOut.Write("Hello, I'm Client");
+				//peer->Send(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0,RakNet::UNASSIGNED_SYSTEM_ADDRESS,true);
 			}break;
 			case ID_NEW_INCOMING_CONNECTION:
 			{
@@ -474,15 +484,15 @@ void processNetwork(RakNet::RakPeerInterface *peer)
 			}break;
 			case ID_MARR_MESSAGE:
 			{
-				RakNet::RakString rs;
-				RakNet::BitStream bsIn(packet->data,packet->length,false);
-				bsIn.IgnoreBytes(sizeof(RakNet::MessageID));
-				bsIn.Read(rs);
-				std::cout << rs.C_String() << std::endl;
+				Message* msg = (Message*)packet->data;
+
+				messages->push_back(*msg);
+				std::cout << "From: '" << msg->name << "'" << std::endl;
+				std::cout << "text: '" << msg->text << "'" << std::endl;
 			}break;
 			default:
 			{
-				std::cout << "Message with identifier " << packet->data[0] << " has arrived." << std::endl;
+				std::cout << "Message with identifier '" << (int)packet->data[0] << "' has arrived." << std::endl;
 			} break;
 		}
 	}

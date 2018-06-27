@@ -23,7 +23,7 @@ client:
 	g++ Source/Client.cpp -g $(compilerFlags) -IInclude -LLibraries -D_REENTRANT -L/usr/lib/x86_64-linux-gnu $(linkerFlags) -o bin/client
 
 server:
-	g++ Source/Server.cpp -IInclude -LLibraries $(linkerFlags) -o bin/server
+	g++ Source/Server.cpp $(compilerFlags) -IInclude -LLibraries $(linkerFlags) -o bin/server
 
 pre:
 	$(PRE)
