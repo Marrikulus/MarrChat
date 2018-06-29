@@ -1,8 +1,6 @@
 #include <csignal>
 #include <sstream>
 
-
-
 #include <GL/glew.h>
 #define GL3_PROTOTYPES 1
 #include <GL/gl.h>
@@ -15,26 +13,23 @@
 #include <SDL2/SDL_ttf.h>
 #include "Common.h"
 
-#define MIN(a, b) ((a < b) ? a : b)
-#define MAX(a, b) ((a > b) ? a : b)
-
-static const int 	SCREEN_WIDTH  = 800;
-static const int 	SCREEN_HEIGHT = 600;
-static const float 	SCREEN_WIDTH_F  = 800.0f;
-static const float 	SCREEN_HEIGHT_F = 600.0f;
-static SDL_Window *window = NULL;
-static SDL_GLContext context;
-static SDL_Event event;
-static RakNet::Packet *packet = NULL;
-static bool quit = false;
-
-#define MAX_TEXT_LENGTH 256
-static char text[MAX_TEXT_LENGTH];
-#define MAX_NAME_LENGTH 24
-static char userName[MAX_NAME_LENGTH];
+global const int 	SCREEN_WIDTH  = 800;
+global const int 	SCREEN_HEIGHT = 600;
+global const float 	SCREEN_WIDTH_F  = 800.0f;
+global const float 	SCREEN_HEIGHT_F = 600.0f;
+global SDL_Window *window = NULL;
+global SDL_GLContext context;
+global SDL_Event event;
+global RakNet::Packet *packet = NULL;
+global bool quit = false;
 
 
-static struct OpenGL
+global i8 text[MAX_TEXT_LENGTH];
+global i8 userName[MAX_NAME_LENGTH];
+
+
+
+global struct OpenGL
 {
 	GLuint ProgramId;
 	GLuint VertexShaderId;
@@ -43,8 +38,6 @@ static struct OpenGL
 	GLuint VertexBufferHandle;
 	GLuint VertexArrayHandle;
 } Opengl;
-
-
 
 
 void processNetwork(std::vector<Message> *messages,RakNet::RakPeerInterface *peer);
@@ -60,6 +53,11 @@ void TextShader(OpenGL*);
 
 int main(int argc, char const *argv[])
 {
+	std::cout << MAX_NAME_LENGTH << std::endl;
+	std::cout << sizeof(userName) << std::endl;
+
+	return 0;
+
 	if (SDL_Init(SDL_INIT_EVERYTHING) < 0)
 		return 1;
 
@@ -69,14 +67,17 @@ int main(int argc, char const *argv[])
 		return 1;
 	}
 
+
 	if (argc > 1)
 	{
 		int length = MIN(strlen(argv[1]), MAX_NAME_LENGTH);
+
 		strncpy(userName, argv[1], length);
+		userName[length-1] = 0;
 	}
 	else
 	{
-		strncpy(userName, "Ingimar", 8);
+		strcpy(userName, "Ingimar");
 	}
 
 	u32 startclock = 0;
@@ -119,7 +120,18 @@ int main(int argc, char const *argv[])
 	RakNet::SocketDescriptor sd;
 
 	peer->Startup(1, &sd, 1);
-	peer->Connect("127.0.0.1", SERVER_PORT, 0, 0);
+	auto result = peer->Connect("127.0.0.1", SERVER_PORT, 0, 0);
+
+	if (result != RakNet::CONNECTION_ATTEMPT_STARTED)
+	{
+		RakNet::RakPeerInterface::DestroyInstance(peer);
+		SDL_GL_DeleteContext(context);
+		SDL_DestroyWindow(window);
+		TTF_Quit();
+		SDL_Quit();
+		return 1;
+	}
+
 
 	std::vector<Message> messages = {};
 
@@ -162,6 +174,8 @@ int main(int argc, char const *argv[])
 
 		drawSquare(30.0f, 30.0f, 30.0f, 30.0f);
 
+		drawSquare(30.0f, 30.0f, 30.0f, 30.0f);
+
 		for (auto message : messages)
 		{
 			drawText(message.name, nameX, y);
@@ -178,9 +192,9 @@ int main(int argc, char const *argv[])
 		{
 			currentFPS = 1000 / deltaclock;
 
-			ss.str("");
-			ss << "Hi - " << currentFPS << " fps";
-			SDL_SetWindowTitle(window, ss.str().c_str());
+			//ss.str("");
+			//ss << "Hi - " << currentFPS << " fps";
+			//SDL_SetWindowTitle(window, ss.str().c_str());
 		}
 	}
 
@@ -280,7 +294,7 @@ void TextShader(OpenGL * op)
 {
 	GLchar *VertexCode[] =
 	{
-		R"FOO(
+		(char*)R"FOO(
 		#version 330 core
 
 		#define v4 vec4
@@ -316,7 +330,7 @@ void TextShader(OpenGL * op)
 
 	GLchar *FragmentCode[] =
 	{
-		R"FOO(
+		(char*)R"FOO(
 		#version 330 core
 
 		#define v4 vec4
@@ -444,27 +458,13 @@ void processNetwork(std::vector<Message> *messages, RakNet::RakPeerInterface *pe
 	{
 		switch (packet->data[0])
 		{
-			case ID_REMOTE_DISCONNECTION_NOTIFICATION:
+			case ID_CONNECTION_ATTEMPT_FAILED:
 			{
-				std::cout << "Another client has disconnected." << std::endl;
-			}break;
-			case ID_REMOTE_CONNECTION_LOST:
-			{
-				std::cout << "Another client has lost the connection." << std::endl;
-			}break;
-			case ID_REMOTE_NEW_INCOMING_CONNECTION:
-			{
-				std::cout << "Another client has connected." << std::endl;
-			}break;
+				std::cout << "Failed to connect to server" << std::endl;
+			} break;
 			case ID_CONNECTION_REQUEST_ACCEPTED:
 			{
 				std::cout << "Our connection request has been accepted." << std::endl;
-
-
-				//RakNet::BitStream bsOut;
-				//bsOut.Write((RakNet::MessageID)ID_MARR_MESSAGE);
-				//bsOut.Write("Hello, I'm Client");
-				//peer->Send(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0,RakNet::UNASSIGNED_SYSTEM_ADDRESS,true);
 			}break;
 			case ID_NEW_INCOMING_CONNECTION:
 			{
